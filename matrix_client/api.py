@@ -178,7 +178,7 @@ class MatrixHttpApi(object):
             }
         )
 
-    def send_state_event(self, room_id, event_type, content, state_key=""):
+    def send_state_event(self, room_id, event_type, content, state_key="", ts=None):
         """Perform /rooms/$room_id/state/$event_type
 
         Args:
@@ -186,15 +186,20 @@ class MatrixHttpApi(object):
             event_type(str): The state event type to send.
             content(dict): The JSON content to send.
             state_key(str): Optional. The state key for the event.
+            ts(int): Optional. Timestamp in ms for event (application services only).
         """
+        params = {}
+        if ts:
+            params["ts"] = ts
+
         path = "/rooms/%s/state/%s" % (
             quote(room_id), quote(event_type),
         )
         if state_key:
             path += "/%s" % (quote(state_key))
-        return self._send("PUT", path, content)
+        return self._send("PUT", path, content, query_params=params)
 
-    def send_message_event(self, room_id, event_type, content, txn_id=None):
+    def send_message_event(self, room_id, event_type, content, txn_id=None, ts=None):
         """Perform /rooms/$room_id/send/$event_type
 
         Args:
@@ -202,22 +207,27 @@ class MatrixHttpApi(object):
             event_type(str): The event type to send.
             content(dict): The JSON content to send.
             txn_id(int): Optional. The transaction ID to use.
+            ts(int): Optional. Timestamp in ms for event (application services only).
         """
         if not txn_id:
             txn_id = str(self.txn_id) + str(int(time() * 1000))
 
         self.txn_id = self.txn_id + 1
 
+        params = {}
+        if ts:
+            params["ts"] = ts
+
         path = "/rooms/%s/send/%s/%s" % (
             quote(room_id), quote(event_type), quote(str(txn_id)),
         )
-        return self._send("PUT", path, content)
+        return self._send("PUT", path, content, query_params=params)
 
     # content_type can be a image,audio or video
     # extra information should be supplied, see
     # https://matrix.org/docs/spec/r0.0.1/client_server.html
     def send_content(self, room_id, item_url, item_name, msg_type,
-                     extra_information=None):
+                     extra_information=None, **kwargs):
         if extra_information is None:
             extra_information = {}
 
@@ -227,10 +237,11 @@ class MatrixHttpApi(object):
             "body": item_name,
             "info": extra_information
         }
-        return self.send_message_event(room_id, "m.room.message", content_pack)
+        return self.send_message_event(room_id, "m.room.message", content_pack, **kwargs)
 
     # http://matrix.org/docs/spec/client_server/r0.2.0.html#m-location
-    def send_location(self, room_id, geo_uri, name, thumb_url=None, thumb_info=None):
+    def send_location(self, room_id, geo_uri, name, thumb_url=None, thumb_info=None,
+                      **kwargs):
         """Send m.location message event
 
         Args:
@@ -239,6 +250,7 @@ class MatrixHttpApi(object):
             name(str): Description for the location.
             thumb_url(str): URL to the thumbnail of the location.
             thumb_info(dict): Metadata about the thumbnail, type ImageInfo.
+            kwargs: Additional arguments to pass to self.send_message_event.
         """
         content_pack = {
             "geo_uri": geo_uri,
@@ -250,44 +262,49 @@ class MatrixHttpApi(object):
         if thumb_info:
             content_pack["thumbnail_info"] = thumb_info
 
-        return self.send_message_event(room_id, "m.room.message", content_pack)
+        return self.send_message_event(room_id, "m.room.message", content_pack, **kwargs)
 
-    def send_message(self, room_id, text_content, msgtype="m.text"):
+    def send_message(self, room_id, text_content, msgtype="m.text", **kwargs):
         """Perform /rooms/$room_id/send/m.room.message
 
         Args:
             room_id(str): The room ID to send the event in.
             text_content(str): The m.text body to send.
+            kwargs: Additional arguments to pass to self.send_message_event.
         """
         return self.send_message_event(
             room_id, "m.room.message",
-            self.get_text_body(text_content, msgtype)
+            self.get_text_body(text_content, msgtype),
+            **kwargs
         )
 
-    def send_emote(self, room_id, text_content):
+    def send_emote(self, room_id, text_content, **kwargs):
         """Perform /rooms/$room_id/send/m.room.message with m.emote msgtype
 
         Args:
             room_id(str): The room ID to send the event in.
             text_content(str): The m.emote body to send.
+            kwargs: Additional arguments to pass to self.send_message_event.
         """
         return self.send_message_event(
             room_id, "m.room.message",
-            self.get_emote_body(text_content)
+            self.get_emote_body(text_content),
+            **kwargs
         )
 
-    def send_notice(self, room_id, text_content):
+    def send_notice(self, room_id, text_content, **kwargs):
         """Perform /rooms/$room_id/send/m.room.message with m.notice msgtype
 
         Args:
             room_id(str): The room ID to send the event in.
             text_content(str): The m.notice body to send.
+            kwargs: Additional arguments to pass to self.send_message_event.
         """
         body = {
             "msgtype": "m.notice",
             "body": text_content
         }
-        return self.send_message_event(room_id, "m.room.message", body)
+        return self.send_message_event(room_id, "m.room.message", body, **kwargs)
 
     def get_room_messages(self, room_id, token, direction, limit=10, to=None):
         """Perform GET /rooms/{roomId}/messages.
